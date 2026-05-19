@@ -84,7 +84,7 @@ const providers = [
     name: 'Mistral AI',
     description: 'Mistral Large, Medium, Small',
     icon: '🌊',
-    keyPrefix: /^[A-Za-z0-9]{32}$/,
+    keyPrefix: null,
     baseUrl: 'https://api.mistral.ai',
     validationEndpoint: '/v1/models',
     chatEndpoint: '/v1/chat/completions',
@@ -105,7 +105,7 @@ const providers = [
     name: 'Cohere',
     description: 'Command R+, Command R',
     icon: '🔮',
-    keyPrefix: /^[A-Za-z0-9]{40}$/,
+    keyPrefix: null,
     baseUrl: 'https://api.cohere.ai',
     validationEndpoint: '/v1/models',
     chatEndpoint: '/v1/chat',
@@ -176,7 +176,7 @@ const providers = [
     name: 'Together AI',
     description: 'LLaMA, Mixtral hosted models',
     icon: '🤝',
-    keyPrefix: /^[a-f0-9]{64}$/,
+    keyPrefix: null,
     baseUrl: 'https://api.together.xyz',
     validationEndpoint: '/v1/models',
     chatEndpoint: '/v1/chat/completions',
@@ -260,7 +260,7 @@ const providers = [
     name: 'AI21 Labs',
     description: 'Jamba 1.5 Large and Mini',
     icon: '🧬',
-    keyPrefix: /^[A-Za-z0-9]{40,}$/,
+    keyPrefix: null,
     baseUrl: 'https://api.ai21.com',
     validationEndpoint: '/v1/chat/completions',
     chatEndpoint: '/v1/chat/completions',
@@ -387,7 +387,7 @@ const detectProvider = (key) => {
 
   for (const providerId of priorityOrder) {
     const provider = providers.find(p => p.id === providerId);
-    if (provider && provider.keyPrefix.test(trimmedKey)) {
+    if (provider && provider.keyPrefix && provider.keyPrefix.test(trimmedKey)) {
       matched.push(provider);
     }
   }
@@ -458,7 +458,7 @@ const loadSession = () => {
         currentProvider = provider;
         const input = document.getElementById('apiKeyInput');
         if (input && data.key) input.value = data.key;
-        selectProvider(provider.id, false);
+        selectProvider(provider.id);
       }
     }
   } catch (e) {
@@ -482,7 +482,7 @@ const renderProviderGrid = (providerList) => {
       <div class="provider-icon">${p.icon}</div>
       <div class="provider-name">${sanitizeText(p.name)}</div>
       <div class="provider-desc">${sanitizeText(p.description)}</div>
-      <div class="provider-key-hint">${p.keyPrefix.source.replace(/[\\^$]/g, '').substring(0, 12)}...</div>
+      <div class="provider-key-hint">${p.keyPrefix ? p.keyPrefix.source.replace(/[\\^$]/g, '').substring(0, 12) + '...' : 'Manual selection'}</div>
     </div>
   `).join('');
 };
@@ -500,9 +500,12 @@ const updateDetectionBadge = (detectedProviders) => {
   const badge = document.getElementById('detectionBadge');
   if (!badge) return;
 
-  if (detectedProviders.length > 0) {
+  if (detectedProviders.length > 1) {
     const names = detectedProviders.map(p => p.name).join(', ');
-    badge.textContent = `Detected: ${names}`;
+    badge.textContent = `Multiple matches: ${names} - please select manually`;
+    badge.classList.add('visible');
+  } else if (detectedProviders.length === 1) {
+    badge.textContent = `Detected: ${detectedProviders[0].name}`;
     badge.classList.add('visible');
   } else {
     badge.textContent = '';
@@ -523,7 +526,7 @@ const updateChatHeader = () => {
 // PROVIDER SELECTION
 // ============================================================
 
-const selectProvider = (providerId, save = true) => {
+const selectProvider = (providerId) => {
   const provider = providers.find(p => p.id === providerId);
   if (!provider) return;
 
@@ -539,8 +542,6 @@ const selectProvider = (providerId, save = true) => {
   // Show chat section
   const chatSection = document.getElementById('chatSection');
   if (chatSection) chatSection.classList.add('visible');
-
-  if (save) saveSession();
 };
 
 // ============================================================
@@ -579,7 +580,14 @@ const validateKey = async () => {
     }
 
     // Anthropic/Perplexity/AI21: validation via POST with minimal body
-    if (['anthropic', 'perplexity', 'ai21'].includes(currentProvider.id)) {
+    if (currentProvider.id === 'anthropic') {
+      options.method = 'POST';
+      options.body = JSON.stringify({
+        model: currentProvider.models[0],
+        messages: [{ role: 'user', content: 'Hi' }],
+        max_tokens: 1
+      });
+    } else if (['perplexity', 'ai21'].includes(currentProvider.id)) {
       options.method = 'POST';
       options.body = JSON.stringify({
         model: currentProvider.models[0],
@@ -587,13 +595,6 @@ const validateKey = async () => {
         max_tokens: 1,
         stream: false
       });
-      if (currentProvider.id === 'anthropic') {
-        options.body = JSON.stringify({
-          model: currentProvider.models[0],
-          messages: [{ role: 'user', content: 'Hi' }],
-          max_tokens: 1
-        });
-      }
     }
 
     const response = await fetch(url, options);
