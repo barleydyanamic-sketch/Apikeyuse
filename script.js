@@ -2,6 +2,10 @@
 let messages = [];
 let currentApiKey = '';
 let isStreaming = false;
+let abortController = null;
+
+// Maximum number of messages to keep in history (excluding system messages)
+const MAX_MESSAGES = 20;
 
 // DOM elements
 const keyInput = document.getElementById('api-key-input');
@@ -14,6 +18,7 @@ const chatSection = document.getElementById('chat-section');
 const chatMessages = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
 const sendBtn = document.getElementById('send-btn');
+const stopBtn = document.getElementById('stop-btn');
 const modelSelect = document.getElementById('model-select');
 const creditStatus = document.getElementById('credit-status');
 const creditModels = document.getElementById('credit-models');
@@ -103,6 +108,38 @@ function showValidatedState() {
     }
 }
 
+// Trim messages to stay within the limit
+function trimMessages() {
+    // Separate system messages from the rest
+    var systemMessages = messages.filter(function(m) { return m.role === 'system'; });
+    var nonSystemMessages = messages.filter(function(m) { return m.role !== 'system'; });
+
+    // Keep only the last MAX_MESSAGES non-system messages
+    if (nonSystemMessages.length > MAX_MESSAGES) {
+        nonSystemMessages = nonSystemMessages.slice(nonSystemMessages.length - MAX_MESSAGES);
+    }
+
+    messages = systemMessages.concat(nonSystemMessages);
+}
+
+// Sanitize text to prevent XSS - strips all HTML tags
+function sanitizeText(text) {
+    return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Render assistant message content with line breaks preserved
+function renderAssistantContent(bubble, content) {
+    bubble.innerHTML = sanitizeText(content).replace(/\n/g, '<br>');
+}
+
+// Stop the current streaming request
+function stopStreaming() {
+    if (abortController) {
+        abortController.abort();
+        abortController = null;
+    }
+}
+
 // Send a chat message
 async function sendMessage() {
     const content = chatInput.value.trim();
@@ -114,6 +151,7 @@ async function sendMessage() {
 
     // Add user message
     messages.push({ role: 'user', content: content });
+    trimMessages();
     appendMessage('user', content);
     chatInput.value = '';
 
@@ -122,7 +160,10 @@ async function sendMessage() {
     assistantBubble.classList.add('streaming');
 
     isStreaming = true;
-    sendBtn.disabled = true;
+    sendBtn.classList.add('hidden');
+    stopBtn.classList.remove('hidden');
+
+    abortController = new AbortController();
 
     try {
         const model = modelSelect.value;
@@ -136,7 +177,8 @@ async function sendMessage() {
                 model: model,
                 messages: messages,
                 stream: true
-            })
+            }),
+            signal: abortController.signal
         });
 
         if (!response.ok) {
@@ -146,7 +188,9 @@ async function sendMessage() {
             assistantBubble.classList.remove('streaming');
             messages.pop(); // Remove the user message since it failed
             isStreaming = false;
-            sendBtn.disabled = false;
+            sendBtn.classList.remove('hidden');
+            stopBtn.classList.add('hidden');
+            abortController = null;
             return;
         }
 
@@ -175,7 +219,7 @@ async function sendMessage() {
                     const delta = parsed.choices && parsed.choices[0] && parsed.choices[0].delta;
                     if (delta && delta.content) {
                         assistantContent += delta.content;
-                        assistantBubble.textContent = assistantContent;
+                        renderAssistantContent(assistantBubble, assistantContent);
                         scrollToBottom();
                     }
                 } catch (e) {
@@ -186,13 +230,29 @@ async function sendMessage() {
 
         assistantBubble.classList.remove('streaming');
         messages.push({ role: 'assistant', content: assistantContent });
+        trimMessages();
     } catch (error) {
-        assistantBubble.textContent = 'Error: Network issue or connection lost.';
         assistantBubble.classList.remove('streaming');
-        messages.pop(); // Remove the failed user message
+        if (error.name === 'AbortError') {
+            // User stopped the request
+            var partialContent = assistantBubble.textContent;
+            if (partialContent) {
+                renderAssistantContent(assistantBubble, partialContent + '\n\n[Stopped]');
+                messages.push({ role: 'assistant', content: partialContent });
+                trimMessages();
+            } else {
+                assistantBubble.textContent = '[Stopped]';
+                messages.pop(); // Remove the user message since nothing was generated
+            }
+        } else {
+            assistantBubble.textContent = 'Error: Network issue or connection lost.';
+            messages.pop(); // Remove the failed user message
+        }
     } finally {
         isStreaming = false;
-        sendBtn.disabled = false;
+        sendBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        abortController = null;
         scrollToBottom();
     }
 }
@@ -201,7 +261,11 @@ async function sendMessage() {
 function appendMessage(role, content) {
     const bubble = document.createElement('div');
     bubble.className = 'message ' + role;
-    bubble.textContent = content;
+    if (role === 'assistant' && content) {
+        renderAssistantContent(bubble, content);
+    } else {
+        bubble.textContent = content;
+    }
     chatMessages.appendChild(bubble);
     scrollToBottom();
     return bubble;
