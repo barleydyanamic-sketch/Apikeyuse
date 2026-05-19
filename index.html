@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI API Key Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="app-header">
+        <h1>AI API Key Manager</h1>
+        <p>Validate your OpenAI API key and start chatting</p>
+    </header>
+
+    <main id="app-main">
+        <section id="key-section">
+            <div class="card">
+                <h2>Enter Your API Key</h2>
+                <div class="input-group">
+                    <input type="password" id="api-key-input" placeholder="sk-..." autocomplete="off">
+                    <button id="validate-btn" onclick="validateKey()">Validate Key</button>
+                </div>
+                <div id="key-status" class="status-message"></div>
+                <div id="loading-spinner" class="spinner hidden"></div>
+            </div>
+        </section>
+
+        <section id="credit-section" class="hidden">
+            <div class="card">
+                <h2>Account Information</h2>
+                <div id="credit-info">
+                    <div class="credit-item">
+                        <span class="credit-label">Status</span>
+                        <span id="credit-status" class="credit-value">--</span>
+                    </div>
+                    <div class="credit-item">
+                        <span class="credit-label">Models Available</span>
+                        <span id="credit-models" class="credit-value">--</span>
+                    </div>
+                    <div class="credit-item">
+                        <span class="credit-label">Key Prefix</span>
+                        <span id="credit-key-prefix" class="credit-value">--</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="chat-section" class="hidden">
+            <div class="card chat-card">
+                <div class="chat-header">
+                    <h2>Chat</h2>
+                    <div class="model-selector">
+                        <label for="model-select">Model:</label>
+                        <select id="model-select">
+                            <option value="gpt-4o-mini" selected>GPT-4o Mini</option>
+                            <option value="gpt-4o">GPT-4o</option>
+                            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="chat-messages"></div>
+                <div class="chat-input-group">
+                    <textarea id="chat-input" placeholder="Type your message..." rows="2"></textarea>
+                    <button id="send-btn" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
